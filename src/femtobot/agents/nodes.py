@@ -12,7 +12,7 @@ from femtobot.tools.builtin import get_builtin_tool, get_builtin_tool_list
 _chat_model = None
 
 
-def user_input(state: AgentState) -> Command:
+def user_input(state: AgentState) -> Command[Literal['chat_model_call', 'command_parse']]:
     user_prompt: str = interrupt(
         {
             'action': 'user_input',
