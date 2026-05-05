@@ -10,10 +10,9 @@ dependencies = [
   "langchain-deepseek>=1.0.1",
   "langgraph>=1.1.10",
   "loguru>=0.7.3",
-  "prompt-toolkit>=3.0.52",
-  "rich>=15.0.0",
   "socksio>=1.0.0",
   "tavily-python>=0.7.24",
+  "textual>=8.2.5",
   "typer>=0.25.1",
 ]
 

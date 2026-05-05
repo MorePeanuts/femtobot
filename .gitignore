@@ -12,3 +12,6 @@ wheels/
 # MacOS-generated files
 **/.DS_Store
 
+# Others
+logs/
+

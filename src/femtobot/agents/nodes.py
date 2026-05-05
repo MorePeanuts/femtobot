@@ -1,3 +1,4 @@
+from femtobot.agents.interrupt import InterruptValue
 from typing import Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
@@ -12,11 +13,14 @@ from femtobot.tools.builtin import get_builtin_tool, get_builtin_tool_list
 _chat_model = None
 
 
-def user_input(state: AgentState) -> Command[Literal['chat_model_call', 'command_parse']]:
+def user_input(
+    state: AgentState,
+) -> Command[Literal['chat_model_call', 'command_parse']]:
     user_prompt: str = interrupt(
         {
-            'action': 'user_input',
-            'message': '> ',
+            'node': 'user_input',
+            'message': '**User:** ',
+            'choices': [],
         }
     )
     goto = 'chat_model_call'
@@ -34,7 +38,9 @@ def user_input(state: AgentState) -> Command[Literal['chat_model_call', 'command
     )
 
 
-async def chat_model_call(state: AgentState) -> Command[Literal['builtin_tools', 'user_input']]:
+async def chat_model_call(
+    state: AgentState,
+) -> Command[Literal['builtin_tools', 'user_input']]:
     global _chat_model
     if _chat_model is None:
         _chat_model = init_chat_model(**get_model_config(state['model_name']))
@@ -57,9 +63,20 @@ async def chat_model_call(state: AgentState) -> Command[Literal['builtin_tools',
     )
 
 
-def command_parse(state: AgentState) -> Command[Literal['user_input', '__end__']]:
+def command_parse(
+    state: AgentState,
+) -> Command[Literal['user_input', '__end__']]:
     if state['user_last_prompt'] == '/exit':
         return Command(goto='__end__')
+    elif state['user_last_prompt'] == '/model':
+        user_response = interrupt(
+            {
+                'node': 'command_parse',
+                'message': 'Choose a model:',
+                'choices': [],
+            }
+        )
+        raise NotImplementedError
     # TODO: More command parsing
     else:
         # TODO: If the command parsing fails, an error message
@@ -67,7 +84,9 @@ def command_parse(state: AgentState) -> Command[Literal['user_input', '__end__']
         return Command(goto='user_input')
 
 
-async def builtin_tools(state: AgentState) -> Command[Literal['chat_model_call']]:
+async def builtin_tools(
+    state: AgentState,
+) -> Command[Literal['chat_model_call']]:
     ai_msg = state['messages'][-1]
     assert isinstance(ai_msg, AIMessage), (
         'The last message entering the tool call node does not come from AI.'
@@ -76,22 +95,25 @@ async def builtin_tools(state: AgentState) -> Command[Literal['chat_model_call']
     for tool_call in ai_msg.tool_calls:
         user_response = interrupt(
             {
-                'action': 'builtin_tools',
+                'node': 'builtin_tools',
                 'message': (
                     f'ChatBot wants to use builtin tool {tool_call["name"]}.\n'
-                    f'Args:\n\t{tool_call["args"]}'
-                    'Do you allow this operation? (y/n)'
+                    f'Args:\n\t{tool_call["args"]}\n'
+                    'Do you allow this operation?'
                 ),
+                'choices': ['Allow', 'Reject', 'Always', 'Reject with reason'],
             }
         )
-        if user_response == 'y':
+        if user_response == 'Allow':
             tool_msg = await get_builtin_tool(tool_call['name']).ainvoke(tool_call)
             tool_msgs.append(tool_msg)
-        else:
+        elif user_response == 'Reject':
             tool_msgs.append(
                 ToolMessage(
                     content='The tool call was rejected by the user.',
                     tool_call_id=tool_call['id'],
                 )
             )
+        else:
+            raise NotImplementedError
     return Command(update={'messages': tool_msgs}, goto='chat_model_call')
