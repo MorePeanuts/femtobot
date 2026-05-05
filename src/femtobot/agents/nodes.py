@@ -19,7 +19,7 @@ def user_input(
     user_prompt: str = interrupt(
         {
             'node': 'user_input',
-            'message': '[bold]User:[/] ',
+            'message': 'User',
             'choices': [],
         }
     )

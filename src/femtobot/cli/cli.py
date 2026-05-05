@@ -1,3 +1,4 @@
+from rich.markdown import Markdown
 from textual.message import Message
 import asyncio
 from datetime import datetime
@@ -50,7 +51,21 @@ class ChatInput(Input):
 class ChatMessage(Static):
     """Single Chat Message Component"""
 
-    pass
+    def __init__(self, title, text='', **kwargs):
+        super().__init__(**kwargs)
+        self._raw_content = text
+        self.border_title = title
+
+    def on_mount(self) -> None:
+        self.update(Markdown(self._raw_content))
+
+    def append_text(self, text) -> None:
+        self._raw_content += text
+        self.update(Markdown(self._raw_content))
+
+    def set_text(self, text) -> None:
+        self._raw_content = text
+        self.update(Markdown(self._raw_content))
 
 
 class HumanInTheLoop(OptionList):
@@ -124,9 +139,15 @@ class FemtobotCLI(App):
     }
     .user-message {
         color: $success;
+        border: round $success;
+        margin: 1 0;
+        padding: 0 1;
     }
     .bot-message {
         color: $error;
+        border: round $error;
+        margin: 1 0;
+        padding: 0 1;
     }
     """
 
@@ -140,7 +161,7 @@ class FemtobotCLI(App):
 
     def on_ready(self) -> None:
         self.query_one('#chat_input').focus()
-        self._add_message('Hello from ChatBot!\n', 'bot-message')
+        self._add_message('Hello from ChatBot!\n', 'bot-message', 'System')
         self.agent = FemtobotAgent()
 
     @on(Input.Changed, '#chat_input')
@@ -194,22 +215,19 @@ class FemtobotCLI(App):
         input_widget.value = ''
 
         # Render the user's message immediately
-        self._add_message(f'{interrupt.info["message"]}{user_prompt}', 'user-message')
+        self._add_message(user_prompt, 'user-message', interrupt.info['message'])
         self.agent.resume_state(user_prompt)
-
-        # Create an empty message component, ready to receive streaming data.
-        bot_msg_widget = self._add_message('[bold]Femtobot:[/] ', 'bot-message')
 
         # Start the background asynchronous task to handle streaming
         # output and avoid blocking the UI.
-        self.run_worker(self.render_bot_response(bot_msg_widget))
+        self.run_worker(self.render_bot_response())
 
-    def _add_message(self, text: str, css_class: str) -> ChatMessage:
+    def _add_message(self, text: str, css_class: str, title: str) -> ChatMessage:
         """Add a new message to the container and return the component instance."""
         container = self.query_one('#chat_container', VerticalScroll)
 
         # Create a new message component that supports rich syntax.
-        msg_widget = ChatMessage(text, markup=True, classes=css_class)
+        msg_widget = ChatMessage(title, text, classes=css_class)
 
         # Mount the component into the container.
         container.mount(msg_widget)
@@ -217,17 +235,18 @@ class FemtobotCLI(App):
 
         return msg_widget
 
-    async def render_bot_response(self, widget: ChatMessage) -> None:
+    async def render_bot_response(self) -> None:
         """Call the streaming output interface of FemtobotAgent."""
         container = self.query_one('#chat_container', VerticalScroll)
-        current_text = widget.content
+        widget = self._add_message('', 'bot-message', 'Femtobot')
 
         async for output in self.agent.stream_response():
             if output.tp == 'token':
-                current_text += output.content
+                # current_text += output.content
+                widget.append_text(output.content)
 
                 # Dynamically update the content of the ChatMessage component.
-                widget.update(current_text)
+                # widget.update(current_text)
 
                 container.scroll_end(animate=False)
 
@@ -256,8 +275,7 @@ class FemtobotCLI(App):
         self.query_one('#chat_input').focus()
         self.query_one('#chat_container', VerticalScroll).scroll_end(animate=False)
 
-        bot_msg_widget = self._add_message('[bold]Femtobot:[/] ', 'bot-message')
-        self.run_worker(self.render_bot_response(bot_msg_widget))
+        self.run_worker(self.render_bot_response())
 
 
 @app.command()
