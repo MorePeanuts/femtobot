@@ -29,21 +29,27 @@ class ChatInput(Input):
     """Custom chat input box"""
 
     def on_key(self, event: Key) -> None:
-        if event.key == 'tab':
-            # Get the completion list
-            cmd_list = self.app.query_one('#cmd_list', OptionList)
+        cmd_list = self.app.query_one('#cmd_list', OptionList)
 
-            # If the completion menu is displayed and contains candidate commands
-            if cmd_list.display and cmd_list.option_count > 0:
-                # Get the first item and complete it
-                first_cmd_id = cmd_list.get_option_at_index(0).id
-                self.value = f'{first_cmd_id}'
+        if cmd_list.display and cmd_list.option_count > 0:
+            if event.key == 'tab':
+                idx = cmd_list.highlighted if cmd_list.highlighted else 0
+                selected_cmd_id = cmd_list.get_option_at_index(idx).id
+                self.value = f'{selected_cmd_id}'
 
                 # Move the cursor to the end of the input box.
                 self.cursor_position = len(self.value)
 
                 # Prevent the event from continuing to propagate and thus
                 # triggering a focus switch.
+                event.prevent_default()
+                event.stop()
+            elif event.key == 'ctrl+n':
+                cmd_list.action_cursor_down()
+                event.prevent_default()
+                event.stop()
+            elif event.key == 'ctrl+p':
+                cmd_list.action_cursor_up()
                 event.prevent_default()
                 event.stop()
 
@@ -134,7 +140,9 @@ class HumanInTheLoop(Vertical):
 
     BINDINGS = [
         ('j', 'cursor_down', 'Move down'),
+        ('ctrl+n', 'cursor_down', 'Move down'),
         ('k', 'cursor_up', 'Move up'),
+        ('ctrl+p', 'cursor_up', 'Move up'),
     ]
 
     class Decision(Message):
@@ -187,7 +195,9 @@ class ChoiceSelector(Vertical):
         ('escape', 'cancel', 'Cancel'),
         ('q', 'cancel', 'Cancel'),
         ('j', 'cursor_down', 'Move down'),
+        ('ctrl+n', 'cursor_down', 'Move down'),
         ('k', 'cursor_up', 'Move up'),
+        ('ctrl+p', 'cursor_up', 'Move up'),
     ]
 
     class Canceled(Message):
@@ -248,6 +258,7 @@ class ChoiceSelector(Vertical):
 class FemtobotCLI(App):
     """Femtobot command line interface"""
 
+    COMMAND_PALETTE_BINDING = 'ctrl+o'
     CSS = """
     Screen {
         layout: vertical;
@@ -268,7 +279,7 @@ class FemtobotCLI(App):
         overflow-y: auto;
     }
     #cmd_list {
-        display: none; height: auto; max-height: 6;
+        display: none; height: auto; max-height: 12;
         background: $panel; border: tall $accent; margin: 0 1;
     }
     #choice_selector {
@@ -319,7 +330,7 @@ class FemtobotCLI(App):
 
     def on_ready(self) -> None:
         self.query_one('#chat_input').focus()
-        self._add_message('Hello from ChatBot!\n', 'sys-message', 'System')
+        self._add_message('Hello from Femtobot!\n', 'sys-message', 'System')
         self.agent = FemtobotAgent()
 
     @on(Input.Changed, '#chat_input')
