@@ -68,6 +68,67 @@ class ChatMessage(Static):
         self.update(Markdown(self._raw_content))
 
 
+class VimVerticalScroll(VerticalScroll):
+    """VerticalScroll with vim key bindings."""
+
+    BINDINGS = [
+        ('j', 'scroll_down', 'Scroll down'),
+        ('k', 'scroll_up', 'Scroll up'),
+        ('ctrl+d', 'scroll_half_page_down', 'Scroll half page down'),
+        ('ctrl+u', 'scroll_half_page_up', 'Scroll half page up'),
+        ('ctrl+f', 'scroll_page_down', 'Scroll page down'),
+        ('ctrl+b', 'scroll_page_up', 'Scroll page up'),
+        ('G', 'scroll_bottom', 'Scroll to bottom'),
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._g_pressed = False
+
+    def on_key(self, event: Key) -> None:
+        """Handle key press for gg combination."""
+        if event.key == 'g':
+            if self._g_pressed:
+                self.scroll_home(animate=False)
+                self._g_pressed = False
+                event.stop()
+            else:
+                self._g_pressed = True
+                event.stop()
+        else:
+            self._g_pressed = False
+
+    def action_scroll_down(self) -> None:
+        """Scroll down one line."""
+        self.scroll_relative(y=1)
+
+    def action_scroll_up(self) -> None:
+        """Scroll up one line."""
+        self.scroll_relative(y=-1)
+
+    def action_scroll_half_page_down(self) -> None:
+        """Scroll down half page (ctrl+d)."""
+        scroll_amount = max(1, self.content_size.height // 3)
+        self.scroll_relative(y=scroll_amount)
+
+    def action_scroll_half_page_up(self) -> None:
+        """Scroll up half page (ctrl+u)."""
+        scroll_amount = max(1, self.content_size.height // 3)
+        self.scroll_relative(y=-scroll_amount)
+
+    def action_scroll_page_down(self) -> None:
+        """Scroll down one page (ctrl+f)."""
+        self.scroll_page_down()
+
+    def action_scroll_page_up(self) -> None:
+        """Scroll up one page (ctrl+b)."""
+        self.scroll_page_up()
+
+    def action_scroll_bottom(self) -> None:
+        """Scroll to bottom (G)."""
+        self.scroll_end(animate=False)
+
+
 class HumanInTheLoop(OptionList):
     """Human in the loop component, such as tool call."""
 
@@ -152,7 +213,7 @@ class FemtobotCLI(App):
     """
 
     def compose(self) -> ComposeResult:
-        yield VerticalScroll(id='chat_container')
+        yield VimVerticalScroll(id='chat_container')
         yield OptionList(id='cmd_list')
         yield ChatInput(
             placeholder='Please enter your message (type / to view available commands)...',
@@ -224,7 +285,7 @@ class FemtobotCLI(App):
 
     def _add_message(self, text: str, css_class: str, title: str) -> ChatMessage:
         """Add a new message to the container and return the component instance."""
-        container = self.query_one('#chat_container', VerticalScroll)
+        container = self.query_one('#chat_container', VimVerticalScroll)
 
         # Create a new message component that supports rich syntax.
         msg_widget = ChatMessage(title, text, classes=css_class)
@@ -237,7 +298,7 @@ class FemtobotCLI(App):
 
     async def render_bot_response(self) -> None:
         """Call the streaming output interface of FemtobotAgent."""
-        container = self.query_one('#chat_container', VerticalScroll)
+        container = self.query_one('#chat_container', VimVerticalScroll)
         widget = self._add_message('', 'bot-message', 'Femtobot')
 
         async for output in self.agent.stream_response():
@@ -273,7 +334,7 @@ class FemtobotCLI(App):
 
         self.agent.resume_state(event.user_in)
         self.query_one('#chat_input').focus()
-        self.query_one('#chat_container', VerticalScroll).scroll_end(animate=False)
+        self.query_one('#chat_container', VimVerticalScroll).scroll_end(animate=False)
 
         self.run_worker(self.render_bot_response())
 
