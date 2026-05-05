@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     model_name: str
     user_last_prompt: NotRequired[str]
     model_last_response: NotRequired[str]
+    static_message: NotRequired[str]
 
 
 def get_initial_state() -> AgentState:

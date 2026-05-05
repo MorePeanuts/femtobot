@@ -163,11 +163,38 @@ class HumanInTheLoop(OptionList):
 
     @on(OptionList.OptionSelected)
     def handle_selection(self, event: OptionList.OptionSelected) -> None:
-        user_in = event.option.id
-        assert isinstance(user_in, str)
+        user_in = str(event.option.id)
         self.post_message(self.Decision(user_in, self))
         self.disabled = True
         self.border_title = 'Tool Call Request (done)'
+
+
+class ChoiceSelector(OptionList):
+    """General option list component, reusable by different slash commands."""
+
+    BINDINGS = [
+        ('escape', 'cancel', 'Cancel'),
+        ('j', 'cursor_down', 'Move down'),
+        ('k', 'cursor_up', 'Move up'),
+    ]
+
+    class Canceled(Message):
+        """This event is sent when the user presses ESC to cancel the selection."""
+
+        pass
+
+    def __init__(
+        self,
+        command: str = '',
+        prompt: str = '',
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.border_title = command
+        self.prompt = prompt
+
+    def action_cancel(self) -> None:
+        self.post_message(self.Canceled())
 
 
 class FemtobotCLI(App):
@@ -196,6 +223,14 @@ class FemtobotCLI(App):
         display: none; height: auto; max-height: 6;
         background: $panel; border: tall $accent; margin: 0 1;
     }
+    #choice_selector {
+        display: none;
+        dock: bottom;
+        height: auto;
+        max-height: 12;
+        background: $boost;
+        border: tall $accent;
+    }
     #chat_input {
         dock: bottom;
         background: $boost;
@@ -212,11 +247,18 @@ class FemtobotCLI(App):
         margin: 1 0;
         padding: 0 1;
     }
+    .sys-message {
+        color: $warning;
+        border: round $warning;
+        margin: 1 0;
+        padding: 0 1;
+    }
     """
 
     def compose(self) -> ComposeResult:
         yield VimVerticalScroll(id='chat_container')
         yield OptionList(id='cmd_list')
+        yield ChoiceSelector(id='choice_selector')
         yield ChatInput(
             placeholder='Please enter your message (type / to view available commands)...',
             id='chat_input',
@@ -224,7 +266,7 @@ class FemtobotCLI(App):
 
     def on_ready(self) -> None:
         self.query_one('#chat_input').focus()
-        self._add_message('Hello from ChatBot!\n', 'bot-message', 'System')
+        self._add_message('Hello from ChatBot!\n', 'sys-message', 'System')
         self.agent = FemtobotAgent()
 
     @on(Input.Changed, '#chat_input')
@@ -234,7 +276,7 @@ class FemtobotCLI(App):
         """
         cmd_list = self.query_one('#cmd_list', OptionList)
 
-        if event.value.startswith('/'):
+        if event.value.lstrip().startswith('/'):
             commands = self.agent.get_commands()
             matches = {
                 k: v for k, v in commands.items() if k.startswith(event.value.lower().strip())
@@ -278,7 +320,9 @@ class FemtobotCLI(App):
         input_widget.value = ''
 
         # Render the user's message immediately
-        self._add_message(user_prompt, 'user-message', interrupt.info['message'])
+        if user_prompt not in self.agent.get_commands():
+            self._add_message(user_prompt, 'user-message', interrupt.info['message'])
+
         self.agent.resume_state(user_prompt)
 
         # Start the background asynchronous task to handle streaming
@@ -301,16 +345,14 @@ class FemtobotCLI(App):
     async def render_bot_response(self) -> None:
         """Call the streaming output interface of FemtobotAgent."""
         container = self.query_one('#chat_container', VimVerticalScroll)
-        widget = self._add_message('', 'bot-message', 'Femtobot')
+        token_flag = True
 
         async for output in self.agent.stream_response():
             if output.tp == 'token':
-                # current_text += output.content
+                if token_flag:
+                    widget = self._add_message('', 'bot-message', 'Femtobot')
+                token_flag = False
                 widget.append_text(output.content)
-
-                # Dynamically update the content of the ChatMessage component.
-                # widget.update(current_text)
-
                 container.scroll_end(animate=False)
 
             elif output.tp == 'interrupt':
@@ -325,7 +367,29 @@ class FemtobotCLI(App):
                     container.mount(hitl_widget)
                     container.scroll_end(animate=False)
                     hitl_widget.focus()
-                break
+                elif interrupt.goto == 'command_panel':
+                    choice_selector = self.query_one(
+                        '#choice_selector',
+                        ChoiceSelector,
+                    )
+                    match interrupt.info['command']:
+                        case '/model':
+                            choices = self.agent.get_model_list()
+                            choice_selector.clear_options()
+                            for c in choices:
+                                choice_selector.add_option(TOption(c, id=c))
+                            if choice_selector.option_count > 0:
+                                choice_selector.highlighted = 0
+                            choice_selector.prompt = interrupt.info['message']
+                            choice_selector.border_title = interrupt.info['command']
+
+                    self.query_one('#chat_input', ChatInput).display = False
+                    choice_selector.display = True
+                    choice_selector.focus()
+
+            elif output.tp == 'message':
+                self._add_message(output.content, 'sys-message', 'System')
+                container.scroll_end(animate=False)
 
             elif output.tp == 'exit':
                 self.exit()
@@ -338,6 +402,24 @@ class FemtobotCLI(App):
         self.query_one('#chat_input').focus()
         self.query_one('#chat_container', VimVerticalScroll).scroll_end(animate=False)
 
+        self.run_worker(self.render_bot_response())
+
+    @on(OptionList.OptionSelected, '#choice_selector')
+    def handle_command_panel(self, event: OptionList.OptionSelected):
+        selected_choice = str(event.option.id)
+        choice_selector = self.query_one('#choice_selector', ChoiceSelector)
+        input_widget = self.query_one('#chat_input', ChatInput)
+
+        choice_selector.display = False
+        input_widget.display = True
+        input_widget.focus()
+
+        self._add_message(
+            f'The model has been switched to {selected_choice}.',
+            'sys-message',
+            'System',
+        )
+        self.agent.resume_state(selected_choice)
         self.run_worker(self.render_bot_response())
 
 

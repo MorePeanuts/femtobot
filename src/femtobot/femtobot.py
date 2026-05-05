@@ -1,5 +1,6 @@
 from femtobot.agents.commands import _builtin_commands
 from femtobot.agents.interrupt import InterruptValue
+from femtobot.providers.chatmodel import get_model_list as _get_model_list
 from typing import Literal
 from dataclasses import dataclass
 from langchain.messages import AIMessageChunk
@@ -62,13 +63,13 @@ async def agent_loop():
 
 @dataclass
 class AgentOutput:
-    tp: Literal['token', 'interrupt', 'exit']
+    tp: Literal['token', 'interrupt', 'message', 'exit']
     content: str | dict
 
 
 @dataclass
 class AgentInterrupt:
-    goto: Literal['chat_input', 'tool_check', 'command_parse']
+    goto: Literal['chat_input', 'tool_check', 'command_panel']
     info: InterruptValue
 
 
@@ -93,13 +94,16 @@ class FemtobotAgent:
                 case 'builtin_tools':
                     return AgentInterrupt('tool_check', interrupt_info)
                 case 'command_parse':
-                    raise NotImplementedError
+                    return AgentInterrupt('command_panel', interrupt_info)
 
     def resume_state(self, user_in):
         self.state = Command(resume=user_in)
 
     def get_commands(self) -> dict[str, str]:
         return _builtin_commands
+
+    def get_model_list(self) -> list[str]:
+        return _get_model_list()
 
     async def stream_response(self):
         async for chunk in self.agent.astream(
@@ -113,12 +117,16 @@ class FemtobotAgent:
                 msg, _ = chunk['data']
                 if isinstance(msg, AIMessageChunk) and msg.content:
                     yield AgentOutput('token', msg.content)
+            elif chunk['type'] == 'updates':
+                for _, state in chunk['data'].items():
+                    if state and 'static_message' in state:
+                        yield AgentOutput('message', state['static_message'])
         snapshot = self.agent.get_state(self.config)
         self.state = snapshot.values
         self.interrupts = snapshot.interrupts
         if len(snapshot.next) == 0:
             yield AgentOutput('exit', 'See you again!\n')
-        else:
+        if len(self.interrupts) > 0:
             yield AgentOutput('interrupt', self.interrupts[0].value)
 
     def _create_agent(self):

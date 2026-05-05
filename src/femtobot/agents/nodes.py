@@ -7,7 +7,7 @@ from langgraph.types import Command, interrupt
 
 from femtobot.agents.commands import check_command
 from femtobot.agents.state import AgentState
-from femtobot.providers.chatmodel import get_model_config
+from femtobot.providers.chatmodel import get_model_config, get_model_list
 from femtobot.tools.builtin import get_builtin_tool, get_builtin_tool_list
 
 _chat_model = None
@@ -20,22 +20,24 @@ def user_input(
         {
             'node': 'user_input',
             'message': 'User',
-            'choices': [],
         }
     )
-    goto = 'chat_model_call'
     if check_command(user_prompt):
-        goto = 'command_parse'
+        return Command(
+            update={
+                'user_last_prompt': user_prompt,
+            },
+            goto='command_parse',
+        )
     else:
-        pass
         # TODO: User data security verification
-    return Command(
-        update={
-            'messages': [HumanMessage(user_prompt)],
-            'user_last_prompt': user_prompt,
-        },
-        goto=goto,
-    )
+        return Command(
+            update={
+                'messages': [HumanMessage(user_prompt)],
+                'user_last_prompt': user_prompt,
+            },
+            goto='chat_model_call',
+        )
 
 
 async def chat_model_call(
@@ -72,11 +74,16 @@ def command_parse(
         user_response = interrupt(
             {
                 'node': 'command_parse',
-                'message': 'Choose a model:',
-                'choices': [],
+                'message': f'Choose a model: (current model is {state["model_name"]})',
+                'choices': get_model_list(),
+                'command': '/model',
             }
         )
-        raise NotImplementedError
+        _chat_model = init_chat_model(**get_model_config(user_response))
+        return Command(update={'model_name': user_response}, goto='user_input')
+    elif state['user_last_prompt'] == '/usage':
+        # TODO: get model usage
+        return Command(update={'static_message': 'todo!'}, goto='user_input')
     # TODO: More command parsing
     else:
         # TODO: If the command parsing fails, an error message
