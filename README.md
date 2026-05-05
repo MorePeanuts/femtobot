@@ -8,6 +8,37 @@
 
 An LLM-driven agent built using the LangChain ecosystem, inspired by OpenClaw.
 
+## Demo
+
+![Femtobot CLI Demo](imgs/demo.svg)
+
+Interactive TUI interface with conversation history, model selection, and human-in-the-loop tool approval.
+
+## Architecture
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> user_input
+    user_input --> command_parse: /command
+    user_input --> chat_model_call: chat
+    command_parse --> user_input: /model /usage
+    command_parse --> [*]: /exit
+    chat_model_call --> builtin_tools: tool_calls
+    chat_model_call --> user_input: reply
+    builtin_tools --> chat_model_call: tool_result
+
+    note right of user_input
+        Interrupt: wait for user input
+    end note
+    note right of builtin_tools
+        Interrupt: human-in-the-loop
+        tool approval (Allow/Reject)
+    end note
+```
+
+LangGraph-based state machine workflow with cycles for multi-step agent reasoning and tool execution.
+
 ## Features
 
 - Interactive Textual-based TUI with vim keybindings

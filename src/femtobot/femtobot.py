@@ -1,19 +1,20 @@
-from femtobot.agents.commands import _builtin_commands
-from femtobot.agents.interrupt import InterruptValue
-from femtobot.providers.chatmodel import get_model_list as _get_model_list
-from typing import Literal
 from dataclasses import dataclass
+from typing import Literal
+
 from langchain.messages import AIMessageChunk
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command
+from loguru import logger
 from rich.console import Console
 from rich.prompt import Prompt
-from loguru import logger
 
+from femtobot.agents.commands import _builtin_commands
+from femtobot.agents.interrupt import InterruptValue
 from femtobot.agents.nodes import builtin_tools, chat_model_call, command_parse, user_input
 from femtobot.agents.state import AgentState, get_initial_state
+from femtobot.providers.chatmodel import get_model_list as _get_model_list
 
 
 def create_agent():

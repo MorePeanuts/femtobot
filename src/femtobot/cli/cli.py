@@ -1,5 +1,3 @@
-from rich.markdown import Markdown
-from textual.message import Message
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -7,11 +5,13 @@ from typing import Annotated
 
 from loguru import logger
 from rich.console import Console
+from rich.markdown import Markdown
 from textual import on
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll, Vertical
+from textual.containers import Vertical, VerticalScroll
 from textual.events import Key
-from textual.widgets import Input, OptionList, Static, Label
+from textual.message import Message
+from textual.widgets import Input, Label, OptionList, Static
 from textual.widgets.option_list import Option as TOption
 from typer import Argument, Option, Typer
 
@@ -313,6 +313,8 @@ class FemtobotCLI(App):
         padding: 0 1;
     }
     .prompt-text {
+        height: auto;
+        width: 100%;
         margin-bottom: 1;
         color: $text;
         text-style: bold;
@@ -428,6 +430,7 @@ class FemtobotCLI(App):
                         interrupt.info['message'],
                         interrupt.info['choices'],
                     )
+                    # BUG: It may report an error when the tool is executed.
                     container.mount(hitl_widget)
                     container.scroll_end(animate=False)
                     hitl_widget.focus()

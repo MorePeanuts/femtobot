@@ -1,4 +1,3 @@
-from femtobot.agents.interrupt import InterruptValue
 from typing import Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
@@ -6,6 +5,7 @@ from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command, interrupt
 
 from femtobot.agents.commands import check_command
+from femtobot.agents.interrupt import InterruptValue
 from femtobot.agents.state import AgentState
 from femtobot.providers.chatmodel import get_model_config, get_model_list
 from femtobot.tools.builtin import get_builtin_tool, get_builtin_tool_list
