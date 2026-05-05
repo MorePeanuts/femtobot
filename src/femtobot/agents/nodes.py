@@ -19,7 +19,7 @@ def user_input(
     user_prompt: str = interrupt(
         {
             'node': 'user_input',
-            'message': '**User:** ',
+            'message': '[bold]User:[/] ',
             'choices': [],
         }
     )
@@ -101,7 +101,7 @@ async def builtin_tools(
                     f'Args:\n\t{tool_call["args"]}\n'
                     'Do you allow this operation?'
                 ),
-                'choices': ['Allow', 'Reject', 'Always', 'Reject with reason'],
+                'choices': ['Allow', 'Reject', 'Always (TODO)', 'Reject with reason (TODO)'],
             }
         )
         if user_response == 'Allow':

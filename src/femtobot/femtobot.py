@@ -32,7 +32,7 @@ def create_agent():
 async def agent_loop():
     agent = FemtobotAgent()
     console = Console()
-    command_list = agent.get_command_list()
+    command_list = list(agent.get_commands().keys())
 
     while True:
         async for output in agent.stream_response():
@@ -44,18 +44,18 @@ async def agent_loop():
                 console.print(output.content, style='blue', end='')
                 exit(0)
         console.print()
-        goto, interrupt_info = agent.handle_interrupt()
-        match goto:
+        interrupt = agent.handle_interrupt()
+        match interrupt.goto:
             case 'chat_input':
                 console.print(
                     f'Available Tools:\n\t{command_list}',
                     style='red',
                 )
-                user_in = Prompt.ask(interrupt_info['message'])
+                user_in = Prompt.ask(interrupt.info['message'])
             case 'tool_check':
                 user_in = Prompt.ask(
-                    interrupt_info['message'],
-                    choices=interrupt_info['choices'],
+                    interrupt.info['message'],
+                    choices=interrupt.info['choices'],
                 )
         agent.resume_state(user_in)
 
@@ -66,10 +66,14 @@ class AgentOutput:
     content: str | dict
 
 
+@dataclass
+class AgentInterrupt:
+    goto: Literal['chat_input', 'tool_check', 'command_parse']
+    info: InterruptValue
+
+
 class FemtobotAgent:
     def __init__(self):
-        self.state = get_initial_state()
-        self.interrupts = tuple()
         self.running = False
         self.config: RunnableConfig = {
             'configurable': {
@@ -77,23 +81,25 @@ class FemtobotAgent:
             },
         }
         self._create_agent()
+        self.state = self.agent.invoke(get_initial_state(), self.config)
+        self.interrupts = self.state['__interrupt__']
 
     def handle_interrupt(self):
         for interrupt in self.interrupts:
             interrupt_info = interrupt.value
             match interrupt_info['node']:
                 case 'user_input':
-                    return 'chat_input', interrupt_info
+                    return AgentInterrupt('chat_input', interrupt_info)
                 case 'builtin_tools':
-                    return 'tool_check', interrupt_info
+                    return AgentInterrupt('tool_check', interrupt_info)
                 case 'command_parse':
                     raise NotImplementedError
 
     def resume_state(self, user_in):
         self.state = Command(resume=user_in)
 
-    def get_command_list(self) -> list[str]:
-        return list(_builtin_commands)
+    def get_commands(self) -> dict[str, str]:
+        return _builtin_commands
 
     async def stream_response(self):
         async for chunk in self.agent.astream(
