@@ -158,6 +158,9 @@ class HumanInTheLoop(OptionList):
         for option in self.choices:
             self.add_option(TOption(option, id=option))
 
+        if self.option_count > 0:
+            self.highlighted = 0
+
     @on(OptionList.OptionSelected)
     def handle_selection(self, event: OptionList.OptionSelected) -> None:
         user_in = event.option.id
@@ -176,7 +179,6 @@ class FemtobotCLI(App):
     }
     HumanInTheLoop {
         height: auto;
-        max-height: 5;
         border: round $warning;
         background: $panel;
         margin: 1 0;
