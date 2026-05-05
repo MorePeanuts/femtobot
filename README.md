@@ -34,16 +34,25 @@ export TAVILY_API_KEY="your-tavily-api-key"
 
 ## Usage
 
+Directly use uv to start the CLI:
+
 ```bash
 # Run the TUI
-femtobot run
+uv run femtobot
+```
+
+or activate the virtual environment first:
+
+```bash
+source .venv/bin/activate
+femtobot
 ```
 
 ## Roadmap
 
-- [ ] Add more built-in tools
 - [ ] Support additional LLM providers
 - [ ] Persistent conversation history
+- [ ] Add more built-in tools (especially context7)
 - [ ] Plugin system for extensibility
 
 ## License
