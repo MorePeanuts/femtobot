@@ -79,8 +79,11 @@ def command_parse(
                 'command': '/model',
             }
         )
-        _chat_model = init_chat_model(**get_model_config(user_response))
-        return Command(update={'model_name': user_response}, goto='user_input')
+        if user_response != '<|remain|>':
+            _chat_model = init_chat_model(**get_model_config(user_response))
+            return Command(update={'model_name': user_response}, goto='user_input')
+        else:
+            return Command(goto='user_input')
     elif state['user_last_prompt'] == '/usage':
         # TODO: get model usage
         return Command(update={'static_message': 'todo!'}, goto='user_input')

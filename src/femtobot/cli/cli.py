@@ -9,9 +9,9 @@ from loguru import logger
 from rich.console import Console
 from textual import on
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import VerticalScroll, Vertical
 from textual.events import Key
-from textual.widgets import Input, OptionList, Static
+from textual.widgets import Input, OptionList, Static, Label
 from textual.widgets.option_list import Option as TOption
 from typer import Argument, Option, Typer
 
@@ -129,7 +129,7 @@ class VimVerticalScroll(VerticalScroll):
         self.scroll_end(animate=False)
 
 
-class HumanInTheLoop(OptionList):
+class HumanInTheLoop(Vertical):
     """Human in the loop component, such as tool call."""
 
     BINDINGS = [
@@ -153,27 +153,39 @@ class HumanInTheLoop(OptionList):
         self.choices = choices
         self.border_title = 'Tool Call Request'
 
+    def compose(self) -> ComposeResult:
+        yield Label(self.prompt, classes='prompt-text')
+        yield OptionList(*[TOption(opt, id=opt) for opt in self.choices], id='hitl_options')
+
     def on_mount(self) -> None:
+        option_list = self.query_one('#hitl_options', OptionList)
+        if option_list.option_count > 0:
+            option_list.highlighted = 0
 
-        for option in self.choices:
-            self.add_option(TOption(option, id=option))
+    def focus(self, scroll_visible: bool = True):
+        self.query_one('#hitl_options', OptionList).focus(scroll_visible)
+        return self
 
-        if self.option_count > 0:
-            self.highlighted = 0
-
-    @on(OptionList.OptionSelected)
+    @on(OptionList.OptionSelected, '#hitl_options')
     def handle_selection(self, event: OptionList.OptionSelected) -> None:
         user_in = str(event.option.id)
         self.post_message(self.Decision(user_in, self))
         self.disabled = True
         self.border_title = 'Tool Call Request (done)'
 
+    def action_cursor_down(self) -> None:
+        self.query_one('#hitl_options', OptionList).action_cursor_down()
 
-class ChoiceSelector(OptionList):
+    def action_cursor_up(self) -> None:
+        self.query_one('#hitl_options', OptionList).action_cursor_up()
+
+
+class ChoiceSelector(Vertical):
     """General option list component, reusable by different slash commands."""
 
     BINDINGS = [
         ('escape', 'cancel', 'Cancel'),
+        ('q', 'cancel', 'Cancel'),
         ('j', 'cursor_down', 'Move down'),
         ('k', 'cursor_up', 'Move up'),
     ]
@@ -183,18 +195,54 @@ class ChoiceSelector(OptionList):
 
         pass
 
-    def __init__(
-        self,
-        command: str = '',
-        prompt: str = '',
-        **kwargs,
-    ):
+    def __init__(self, command: str = '', prompt: str = '', **kwargs):
         super().__init__(**kwargs)
         self.border_title = command
-        self.prompt = prompt
+        self._prompt_text = prompt
+
+    def compose(self) -> ComposeResult:
+        yield Label(self._prompt_text, id='choice_prompt', classes='prompt-text')
+        yield OptionList(id='choice_options')
+
+    def focus(self, scroll_visible: bool = True):
+        self.query_one('#choice_options', OptionList).focus(scroll_visible)
+        return self
+
+    @property
+    def prompt(self) -> str:
+        return self._prompt_text
+
+    @prompt.setter
+    def prompt(self, value: str) -> None:
+        self._prompt_text = value
+        self.query_one('#choice_prompt', Label).update(value)
+
+    def clear_options(self) -> None:
+        self.query_one('#choice_options', OptionList).clear_options()
+
+    def add_option(self, option: TOption) -> None:
+        self.query_one('#choice_options', OptionList).add_option(option)
+
+    @property
+    def option_count(self) -> int:
+        return self.query_one('#choice_options', OptionList).option_count
+
+    @property
+    def highlighted(self) -> int | None:
+        return self.query_one('#choice_options', OptionList).highlighted
+
+    @highlighted.setter
+    def highlighted(self, value: int) -> None:
+        self.query_one('#choice_options', OptionList).highlighted = value
 
     def action_cancel(self) -> None:
         self.post_message(self.Canceled())
+
+    def action_cursor_down(self) -> None:
+        self.query_one('#choice_options', OptionList).action_cursor_down()
+
+    def action_cursor_up(self) -> None:
+        self.query_one('#choice_options', OptionList).action_cursor_up()
 
 
 class FemtobotCLI(App):
@@ -252,6 +300,11 @@ class FemtobotCLI(App):
         border: round $warning;
         margin: 1 0;
         padding: 0 1;
+    }
+    .prompt-text {
+        margin-bottom: 1;
+        color: $text;
+        text-style: bold;
     }
     """
 
@@ -404,7 +457,7 @@ class FemtobotCLI(App):
 
         self.run_worker(self.render_bot_response())
 
-    @on(OptionList.OptionSelected, '#choice_selector')
+    @on(OptionList.OptionSelected, '#choice_options')
     def handle_command_panel(self, event: OptionList.OptionSelected):
         selected_choice = str(event.option.id)
         choice_selector = self.query_one('#choice_selector', ChoiceSelector)
@@ -420,6 +473,19 @@ class FemtobotCLI(App):
             'System',
         )
         self.agent.resume_state(selected_choice)
+        self.run_worker(self.render_bot_response())
+
+    @on(ChoiceSelector.Canceled)
+    def handle_choice_canceled(self, event: ChoiceSelector.Canceled) -> None:
+        """Handle the cancel event from ChoiceSelector."""
+        choice_selector = self.query_one('#choice_selector', ChoiceSelector)
+        input_widget = self.query_one('#chat_input', ChatInput)
+
+        choice_selector.display = False
+        input_widget.display = True
+        input_widget.focus()
+
+        self.agent.resume_state('<|remain|>')
         self.run_worker(self.render_bot_response())
 
 
